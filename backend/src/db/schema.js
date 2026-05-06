@@ -82,6 +82,10 @@ if (count === 0) {
   ins.run('Trampos.co', 'https://trampos.co/oportunidades', 1);
 }
 
+if (!db.prepare('SELECT id FROM sources WHERE name = ?').get('Gupy')) {
+  db.prepare('INSERT INTO sources (name, url, active) VALUES (?, ?, ?)').run('Gupy', 'https://portal.gupy.io/job-search/term=UX+Designer', 1);
+}
+
 try { db.exec('ALTER TABLE pdfs ADD COLUMN observacoes TEXT'); } catch {}
 try { db.exec('ALTER TABLE pdfs ADD COLUMN version INTEGER DEFAULT 1'); } catch {}
 try { db.exec('ALTER TABLE pdfs ADD COLUMN custom_prompt TEXT'); } catch {}

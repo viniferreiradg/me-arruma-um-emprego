@@ -406,6 +406,92 @@ async function scanTrampos(onProgress = () => {}, limit = 10) {
   return found;
 }
 
+// ── Gupy ──────────────────────────────────────────────────────────────────────
+async function fetchGupy(keyword) {
+  const url = `https://portal.gupy.io/job-search/term=${encodeURIComponent(keyword)}`;
+  const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
+  try {
+    const context = await browser.newContext({ userAgent: UA, viewport: { width: 1280, height: 800 }, locale: 'pt-BR' });
+    const page = await context.newPage();
+    await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+    await page.waitForTimeout(2000);
+
+    const jobs = await page.evaluate(() => {
+      const results = [];
+      const seen = new Set();
+      const cards = document.querySelectorAll('a[href*="gupy.io/jobs/"]');
+      for (const a of cards) {
+        const href = a.href;
+        if (!href || seen.has(href)) continue;
+        seen.add(href);
+        // título: primeiro h2, h3 ou strong dentro do card
+        const titleEl = a.querySelector('h2, h3, h4, strong, [class*="title"], [class*="job-name"]');
+        const title = (titleEl?.textContent || '').trim().replace(/\s+/g, ' ');
+        // empresa: elemento logo antes do título ou com classe company
+        const companyEl = a.querySelector('[class*="company"], [class*="employer"], [class*="organization"]');
+        const company = (companyEl?.textContent || '').trim().replace(/\s+/g, ' ');
+        if (title) results.push({ url: href, title, company: company || 'N/A' });
+      }
+      return results.slice(0, 20);
+    });
+
+    // fallback: se não achou cards com seletor direto, tenta qualquer link gupy
+    if (jobs.length === 0) {
+      const fallback = await page.evaluate(() => {
+        return [...document.querySelectorAll('a[href]')]
+          .filter(a => a.href.includes('gupy.io/jobs/'))
+          .slice(0, 20)
+          .map(a => ({ url: a.href, title: a.textContent.trim().replace(/\s+/g, ' ').slice(0, 100) || 'Vaga', company: 'N/A' }));
+      });
+      return fallback;
+    }
+    return jobs;
+  } catch (e) {
+    console.error('fetchGupy error:', e.message);
+    return [];
+  } finally {
+    await browser.close();
+  }
+}
+
+async function scanGupy(onProgress = () => {}, limit = 10) {
+  const source = db.prepare('SELECT * FROM sources WHERE name = ?').get('Gupy');
+  if (!source || !source.active) { onProgress({ type: 'skipped', source: 'Gupy' }); return 0; }
+
+  const profile = db.prepare('SELECT * FROM profile WHERE id = 1').get();
+  db.prepare("UPDATE sources SET last_scan = datetime('now'), last_status = 'running', jobs_today = 0 WHERE id = ?").run(source.id);
+  onProgress({ type: 'start', source: 'Gupy', limit });
+
+  let found = 0, error = null;
+  try {
+    const keywords = getKeywords(profile);
+    const seen = new Set();
+    let allJobs = [];
+    for (const keyword of keywords) {
+      onProgress({ type: 'progress', source: 'Gupy', message: `Buscando "${keyword}" no Gupy...` });
+      const jobs = await fetchGupy(keyword);
+      for (const j of jobs) { if (!seen.has(j.url)) { seen.add(j.url); allJobs.push(j); } }
+    }
+    const newJobs = allJobs.filter(j => !db.prepare('SELECT id FROM jobs WHERE url = ?').get(j.url));
+    onProgress({ type: 'progress', source: 'Gupy', message: `${newJobs.length} vagas novas para avaliar...` });
+    for (const job of newJobs) {
+      if (found >= limit) break;
+      if (await saveJob(job, 'Gupy', profile, onProgress)) {
+        found++;
+        onProgress({ type: 'count', source: 'Gupy', found, limit });
+      }
+    }
+    db.prepare('UPDATE sources SET last_status = ?, jobs_today = ? WHERE id = ?').run('ok', found, source.id);
+  } catch (e) {
+    error = e.message;
+    db.prepare('UPDATE sources SET last_status = ? WHERE id = ?').run('error', source.id);
+    onProgress({ type: 'error', source: 'Gupy', message: e.message });
+  }
+  db.prepare('INSERT INTO scan_log (source_id, status, jobs_found, error) VALUES (?, ?, ?, ?)').run(source.id, error ? 'error' : 'ok', found, error);
+  if (!error) onProgress({ type: 'done', source: 'Gupy', found });
+  return found;
+}
+
 // ── scanAll ───────────────────────────────────────────────────────────────────
 export async function scanAll(onProgress = () => {}, limit = 10) {
   // Remove vagas pending de scans anteriores interrompidos
@@ -414,5 +500,6 @@ export async function scanAll(onProgress = () => {}, limit = 10) {
   await scanRemotar(onProgress, limit);
   await scanLayers(onProgress, limit);
   await scanTrampos(onProgress, limit);
+  await scanGupy(onProgress, limit);
   onProgress({ type: 'complete' });
 }
