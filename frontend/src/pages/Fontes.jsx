@@ -77,7 +77,7 @@ export default function Fontes() {
                         : 'bg-slate-700 text-slate-400 hover:bg-green-900 hover:text-green-300'
                     }`}
                   >
-                    {src.active ? 'Ativo' : 'Inativo'}
+                    {src.active ? 'Desativar' : 'Ativar'}
                   </button>
                 </div>
               </div>

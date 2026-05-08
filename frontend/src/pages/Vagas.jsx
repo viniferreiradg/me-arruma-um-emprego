@@ -400,58 +400,78 @@ export default function Vagas() {
             Nenhuma vaga encontrada. Cole uma URL ou clique em "Escanear agora".
           </div>
         )}
-        {jobs.map(job => (
-          <div key={job.id} className="bg-slate-800 rounded-xl p-5 flex gap-4">
-            <div className="flex-1 min-w-0">
-              <div className="flex items-start gap-3">
-                <div className="flex-1">
-                  <a href={job.url} target="_blank" rel="noreferrer"
-                    className="text-white font-semibold hover:text-indigo-400 transition-colors">
-                    {job.title}
-                  </a>
-                  <p className="text-slate-400 text-sm mt-0.5">{job.company} · {job.location}</p>
-                </div>
-                {job.score != null && (
-                  <span className={`text-lg font-bold shrink-0 ${scoreColor(job.score)}`}>
-                    {job.score.toFixed(1)}
-                  </span>
-                )}
-              </div>
-              {job.description && (
-                <p className="text-slate-400 text-sm mt-2 line-clamp-3">{job.description}</p>
-              )}
-              <div className="flex gap-2 mt-3 flex-wrap">
-                {job.modality && (
-                  <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full">
-                    {modalityLabel[job.modality] || job.modality}
-                  </span>
-                )}
-                {job.level && (
-                  <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full capitalize">
-                    {job.level}
-                  </span>
-                )}
-                <span className="text-xs bg-slate-700 text-slate-500 px-2 py-0.5 rounded-full">
-                  {job.source}
-                </span>
-              </div>
+        {Object.entries(
+          jobs.reduce((groups, job) => {
+            const date = job.found_at ? job.found_at.slice(0, 10) : 'sem data';
+            if (!groups[date]) groups[date] = [];
+            groups[date].push(job);
+            return groups;
+          }, {})
+        ).map(([date, groupJobs]) => (
+          <div key={date}>
+            <div className="flex items-center gap-3 py-2">
+              <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                {date === 'sem data' ? 'Sem data' : new Date(date + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' })}
+              </span>
+              <div className="flex-1 h-px bg-slate-700" />
+              <span className="text-xs text-slate-600">{groupJobs.length} vaga{groupJobs.length !== 1 ? 's' : ''}</span>
             </div>
-            {filter === 'new' && (
-              <div className="flex flex-col gap-2 shrink-0">
-                <button
-                  onClick={() => markInterest(job.id)}
-                  className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-sm rounded-lg font-medium transition-colors"
-                >
-                  Tenho interesse
-                </button>
-                <button
-                  onClick={() => ignore(job.id)}
-                  className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm rounded-lg transition-colors"
-                >
-                  Ignorar
-                </button>
-              </div>
-            )}
+            <div className="space-y-3">
+              {groupJobs.map(job => (
+                <div key={job.id} className="bg-slate-800 rounded-xl p-5 flex gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start gap-3">
+                      <div className="flex-1">
+                        <a href={job.url} target="_blank" rel="noreferrer"
+                          className="text-white font-semibold hover:text-indigo-400 transition-colors">
+                          {job.title}
+                        </a>
+                        <p className="text-slate-400 text-sm mt-0.5">{job.company} · {job.location}</p>
+                      </div>
+                      {job.score != null && (
+                        <span className={`text-lg font-bold shrink-0 ${scoreColor(job.score)}`}>
+                          {job.score.toFixed(1)}
+                        </span>
+                      )}
+                    </div>
+                    {job.description && (
+                      <p className="text-slate-400 text-sm mt-2 line-clamp-3">{job.description}</p>
+                    )}
+                    <div className="flex gap-2 mt-3 flex-wrap">
+                      {job.modality && (
+                        <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full">
+                          {modalityLabel[job.modality] || job.modality}
+                        </span>
+                      )}
+                      {job.level && (
+                        <span className="text-xs bg-slate-700 text-slate-300 px-2 py-0.5 rounded-full capitalize">
+                          {job.level}
+                        </span>
+                      )}
+                      <span className="text-xs bg-slate-700 text-slate-500 px-2 py-0.5 rounded-full">
+                        {job.source}
+                      </span>
+                    </div>
+                  </div>
+                  {filter === 'new' && (
+                    <div className="flex flex-col gap-2 shrink-0">
+                      <button
+                        onClick={() => markInterest(job.id)}
+                        className="px-3 py-1.5 bg-green-600 hover:bg-green-500 text-white text-sm rounded-lg font-medium transition-colors"
+                      >
+                        Tenho interesse
+                      </button>
+                      <button
+                        onClick={() => ignore(job.id)}
+                        className="px-3 py-1.5 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm rounded-lg transition-colors"
+                      >
+                        Ignorar
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
         ))}
       </div>
