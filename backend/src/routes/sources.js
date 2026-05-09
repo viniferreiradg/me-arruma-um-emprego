@@ -1,21 +1,27 @@
 import { Router } from 'express';
-import db from '../db/schema.js';
+import { query } from '../db/neon.js';
 
 const router = Router();
 
-router.get('/', (req, res) => {
-  res.json(db.prepare('SELECT * FROM sources ORDER BY id').all());
+router.get('/', async (req, res) => {
+  const { rows } = await query('SELECT * FROM sources ORDER BY id');
+  res.json(rows);
 });
 
-router.patch('/:id/toggle', (req, res) => {
-  const source = db.prepare('SELECT * FROM sources WHERE id = ?').get(req.params.id);
+router.patch('/:id/toggle', async (req, res) => {
+  const { rows } = await query('SELECT * FROM sources WHERE id=$1', [req.params.id]);
+  const source = rows[0];
   if (!source) return res.status(404).json({ error: 'Fonte não encontrada' });
-  db.prepare('UPDATE sources SET active = ? WHERE id = ?').run(source.active ? 0 : 1, source.id);
+  await query('UPDATE sources SET active=$1 WHERE id=$2', [source.active ? 0 : 1, source.id]);
   res.json({ ok: true, active: !source.active });
 });
 
-router.get('/:id/logs', (req, res) => {
-  res.json(db.prepare('SELECT * FROM scan_log WHERE source_id = ? ORDER BY ran_at DESC LIMIT 20').all(req.params.id));
+router.get('/:id/logs', async (req, res) => {
+  const { rows } = await query(
+    'SELECT * FROM scan_log WHERE source_id=$1 ORDER BY ran_at DESC LIMIT 20',
+    [req.params.id]
+  );
+  res.json(rows);
 });
 
 export default router;

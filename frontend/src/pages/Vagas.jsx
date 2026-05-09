@@ -200,6 +200,51 @@ function ScanModal({ onClose, onDone }) {
   );
 }
 
+// ── Modal inclusão manual ─────────────────────────────────────────────────────
+function ManualJobModal({ onConfirm, onClose }) {
+  const [form, setForm] = useState({ url: '', title: '', company: '', text: '' });
+  const set = (k) => (e) => setForm(f => ({ ...f, [k]: e.target.value }));
+  const valid = form.title.trim() && form.company.trim();
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-lg mx-4 p-6 space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-white font-semibold text-base">Incluir vaga manualmente</h2>
+          <button onClick={onClose} className="text-slate-400 hover:text-white transition-colors text-lg leading-none">✕</button>
+        </div>
+
+        <div className="space-y-3">
+          <div>
+            <label className="text-slate-400 text-xs font-medium uppercase tracking-wider block mb-1">Link da vaga</label>
+            <input value={form.url} onChange={set('url')} placeholder="https://..." className="w-full bg-slate-800 text-white placeholder-slate-500 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+          </div>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="text-slate-400 text-xs font-medium uppercase tracking-wider block mb-1">Nome da vaga <span className="text-red-400">*</span></label>
+              <input value={form.title} onChange={set('title')} placeholder="Product Designer Pleno" className="w-full bg-slate-800 text-white placeholder-slate-500 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+            <div className="flex-1">
+              <label className="text-slate-400 text-xs font-medium uppercase tracking-wider block mb-1">Empresa <span className="text-red-400">*</span></label>
+              <input value={form.company} onChange={set('company')} placeholder="Coala Saúde" className="w-full bg-slate-800 text-white placeholder-slate-500 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500" />
+            </div>
+          </div>
+          <div>
+            <label className="text-slate-400 text-xs font-medium uppercase tracking-wider block mb-1">Descrição / texto da vaga</label>
+            <textarea value={form.text} onChange={set('text')} placeholder="Cole aqui a descrição completa da vaga..." rows={7} className="w-full bg-slate-800 text-white placeholder-slate-500 border border-slate-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-500 resize-none" />
+          </div>
+        </div>
+
+        <div className="flex gap-2 justify-end pt-1">
+          <button onClick={onClose} className="px-4 py-2 text-sm text-slate-400 hover:text-white transition-colors">Cancelar</button>
+          <button onClick={() => valid && onConfirm(form)} disabled={!valid} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-sm rounded-lg transition-colors font-medium">
+            Gerar vaga
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Página principal ─────────────────────────────────────────────────────────
 export default function Vagas() {
   const [jobs, setJobs] = useState([]);
@@ -211,6 +256,7 @@ export default function Vagas() {
   const [showScanModal, setShowScanModal] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [lastScan, setLastScan] = useState(null);
+  const [showManualModal, setShowManualModal] = useState(false);
 
   // Carrega nível do perfil como filtro padrão
   useEffect(() => {
@@ -255,6 +301,18 @@ export default function Vagas() {
     }
   };
 
+  const submitManualForm = async ({ url: jobUrl, title, company, text }) => {
+    setLoading(true);
+    try {
+      await axios.post('/api/jobs/manual-text', { url: jobUrl, title, company, text });
+      load();
+    } catch (e) {
+      alert(e.response?.data?.error || 'Erro ao incluir vaga');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const markInterest = async (id) => {
     await axios.post(`/api/jobs/${id}/interest`);
     load();
@@ -284,6 +342,13 @@ export default function Vagas() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-6">
+      {showManualModal && (
+        <ManualJobModal
+          onConfirm={(data) => { setShowManualModal(false); submitManualForm(data); }}
+          onClose={() => setShowManualModal(false)}
+        />
+      )}
+
       {showScanModal && (
         <ScanModal
           onDone={() => { load(); loadLastScan(); }}
@@ -356,6 +421,12 @@ export default function Vagas() {
           className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-sm rounded-lg font-medium transition-colors"
         >
           {loading ? 'Analisando...' : 'Analisar'}
+        </button>
+        <button
+          onClick={() => setShowManualModal(true)}
+          className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-slate-300 text-sm rounded-lg font-medium transition-colors whitespace-nowrap"
+        >
+          Incluir manualmente
         </button>
       </div>
 

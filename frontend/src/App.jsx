@@ -1,11 +1,13 @@
 import { NavLink, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
+import axios from 'axios';
 import Vagas from './pages/Vagas.jsx';
 import Candidaturas from './pages/Candidaturas.jsx';
 import Curriculos from './pages/Curriculos.jsx';
 import Fontes from './pages/Fontes.jsx';
 import Perfil from './pages/Perfil.jsx';
 import Curriculo from './pages/Curriculo.jsx';
+import Login from './pages/Login.jsx';
 
 const tabs = [
   { to: '/vagas', label: 'Vagas', icon: 'briefcase' },
@@ -26,6 +28,7 @@ const Icon = ({ name, className = 'w-5 h-5' }) => {
     curriculum: <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h3.75M9 15h3.75M9 18h3.75m3 .75H18a2.25 2.25 0 0 0 2.25-2.25V6.108c0-1.135-.845-2.098-1.976-2.192a48.424 48.424 0 0 0-1.123-.08m-5.801 0c-.065.21-.1.433-.1.664 0 .414.336.75.75.75h4.5a.75.75 0 0 0 .75-.75 2.25 2.25 0 0 0-.1-.664m-5.8 0A2.251 2.251 0 0 1 13.5 2.25H15c1.012 0 1.867.668 2.15 1.586m-5.8 0c-.376.023-.75.05-1.124.08C9.095 4.01 8.25 4.973 8.25 6.108V8.25m0 0H4.875c-.621 0-1.125.504-1.125 1.125v11.25c0 .621.504 1.125 1.125 1.125h9.75c.621 0 1.125-.504 1.125-1.125V9.375c0-.621-.504-1.125-1.125-1.125H8.25ZM6.75 12h.008v.008H6.75V12Zm0 3h.008v.008H6.75V15Zm0 3h.008v.008H6.75V18Z" />,
     sun: <path strokeLinecap="round" strokeLinejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z" />,
     moon: <path strokeLinecap="round" strokeLinejoin="round" d="M21.752 15.002A9.72 9.72 0 0 1 18 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 0 0 3 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 0 0 9.002-5.998Z" />,
+    logout: <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0 0 13.5 3h-6a2.25 2.25 0 0 0-2.25 2.25v13.5A2.25 2.25 0 0 0 7.5 21h6a2.25 2.25 0 0 0 2.25-2.25V15m3 0 3-3m0 0-3-3m3 3H9" />,
   };
   return (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className}>
@@ -36,11 +39,45 @@ const Icon = ({ name, className = 'w-5 h-5' }) => {
 
 export default function App() {
   const [dark, setDark] = useState(() => localStorage.getItem('theme') !== 'light');
+  const [token, setToken] = useState(() => localStorage.getItem('auth_token'));
 
   useEffect(() => {
     document.documentElement.classList.toggle('dark', dark);
     localStorage.setItem('theme', dark ? 'dark' : 'light');
   }, [dark]);
+
+  useEffect(() => {
+    const reqId = axios.interceptors.request.use(config => {
+      const t = localStorage.getItem('auth_token');
+      if (t) config.headers.Authorization = `Bearer ${t}`;
+      return config;
+    });
+    const resId = axios.interceptors.response.use(null, err => {
+      if (err.response?.status === 401) {
+        localStorage.removeItem('auth_token');
+        setToken(null);
+      }
+      return Promise.reject(err);
+    });
+    return () => {
+      axios.interceptors.request.eject(reqId);
+      axios.interceptors.response.eject(resId);
+    };
+  }, []);
+
+  function handleLogin(t) {
+    localStorage.setItem('auth_token', t);
+    setToken(t);
+  }
+
+  function handleLogout() {
+    localStorage.removeItem('auth_token');
+    setToken(null);
+  }
+
+  if (!token) {
+    return <Login dark={dark} onLogin={handleLogin} />;
+  }
 
   return (
     <div className={dark ? 'dark' : ''}>
@@ -79,14 +116,21 @@ export default function App() {
             ))}
           </nav>
 
-          {/* Theme toggle */}
-          <div className="px-3 py-4 border-t border-slate-200 dark:border-slate-800">
+          {/* Theme toggle + Logout */}
+          <div className="px-3 py-4 border-t border-slate-200 dark:border-slate-800 space-y-1">
             <button
               onClick={() => setDark(d => !d)}
               className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white transition-colors"
             >
               <Icon name={dark ? 'sun' : 'moon'} className="w-5 h-5 shrink-0" />
               {dark ? 'Modo claro' : 'Modo escuro'}
+            </button>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-sm font-medium text-slate-600 dark:text-slate-400 hover:bg-red-50 dark:hover:bg-red-950/30 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+            >
+              <Icon name="logout" className="w-5 h-5 shrink-0" />
+              Sair
             </button>
           </div>
         </aside>

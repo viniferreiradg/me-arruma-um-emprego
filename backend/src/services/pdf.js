@@ -3,7 +3,7 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { adaptCurriculumForJob, injectAdaptationsIntoHTML } from './gemini.js';
-import db from '../db/schema.js';
+import { query } from '../db/neon.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PDF_DIR = join(__dirname, '../../pdfs');
@@ -20,7 +20,8 @@ function slugify(str) {
 }
 
 export async function generatePDF(job, curriculum, customPrompt = null) {
-  const templateRow = db.prepare('SELECT * FROM pdf_templates WHERE id = 1').get();
+  const { rows } = await query('SELECT * FROM pdf_templates WHERE id = 1');
+  const templateRow = rows[0];
   if (!templateRow || !existsSync(templateRow.file_path)) {
     throw new Error('Template HTML não encontrado. Envie um template na aba Currículos.');
   }

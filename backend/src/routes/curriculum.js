@@ -1,13 +1,14 @@
 import { Router } from 'express';
-import db from '../db/schema.js';
+import { query } from '../db/neon.js';
 
 const router = Router();
 
 const parse = (f) => { try { return JSON.parse(f); } catch { return f; } };
 const str = (v) => typeof v === 'object' ? JSON.stringify(v) : (v ?? '');
 
-router.get('/', (req, res) => {
-  const row = db.prepare('SELECT * FROM curriculum WHERE id = 1').get();
+router.get('/', async (req, res) => {
+  const { rows } = await query('SELECT * FROM curriculum WHERE id = 1');
+  const row = rows[0];
   if (!row) return res.json({});
   res.json({
     ...row,
@@ -18,21 +19,15 @@ router.get('/', (req, res) => {
   });
 });
 
-router.post('/', (req, res) => {
+router.post('/', async (req, res) => {
   const d = req.body;
-  const existing = db.prepare('SELECT id FROM curriculum WHERE id = 1').get();
-  if (existing) {
-    db.prepare(`UPDATE curriculum SET
-      title=?, subtitle=?, links=?, summary=?, competencies=?,
-      work_history=?, education=?, updated_at=datetime('now') WHERE id=1`)
-      .run(d.title, d.subtitle, str(d.links), d.summary, str(d.competencies),
-           str(d.work_history), str(d.education));
-  } else {
-    db.prepare(`INSERT INTO curriculum (id,title,subtitle,links,summary,competencies,work_history,education)
-      VALUES (1,?,?,?,?,?,?,?)`)
-      .run(d.title, d.subtitle, str(d.links), d.summary, str(d.competencies),
-           str(d.work_history), str(d.education));
-  }
+  await query(`
+    INSERT INTO curriculum (id, title, subtitle, links, summary, competencies, work_history, education)
+    VALUES (1,$1,$2,$3,$4,$5,$6,$7)
+    ON CONFLICT (id) DO UPDATE SET
+      title=$1, subtitle=$2, links=$3, summary=$4, competencies=$5,
+      work_history=$6, education=$7, updated_at=NOW()
+  `, [d.title, d.subtitle, str(d.links), d.summary, str(d.competencies), str(d.work_history), str(d.education)]);
   res.json({ ok: true });
 });
 

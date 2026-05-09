@@ -4,14 +4,23 @@ import { chromium } from 'playwright';
 const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 async function fetchPageText(url) {
+  const isGoogleForm = url.includes('docs.google.com/forms');
   const browser = await chromium.launch({ headless: true, args: ['--no-sandbox'] });
   try {
     const context = await browser.newContext({ userAgent: UA, locale: 'pt-BR' });
     const page = await context.newPage();
-    await page.goto(url, { waitUntil: 'load', timeout: 30000 });
-    await page.waitForTimeout(2000);
-    const text = await page.evaluate(() => document.body.innerText);
-    return text.replace(/\s+/g, ' ').trim().slice(0, 8000);
+    await page.goto(url, {
+      waitUntil: isGoogleForm ? 'networkidle' : 'load',
+      timeout: 30000
+    });
+    await page.waitForTimeout(isGoogleForm ? 4000 : 2000);
+    const { text, title } = await page.evaluate(() => ({
+      text: document.body.innerText,
+      title: document.title,
+    }));
+    const clean = text.replace(/\s+/g, ' ').trim().slice(0, 8000);
+    // Para Google Forms, inclui o título da aba como contexto extra
+    return isGoogleForm ? `Título da página: ${title}\n\n${clean}` : clean;
   } catch (e) {
     console.error('fetchPageText error:', e.message);
     return '';
@@ -57,6 +66,74 @@ Se não encontrar nenhuma, retorne: {"jobs": []}`;
     console.error('searchJobLinks error:', e.message);
     return [];
   }
+}
+
+export async function evaluateJobFromText(text, url, profile) {
+  const profileText = `
+Profissão: ${profile.profession} | Nível: ${profile.level} | Modalidade: ${profile.modality} | Preferência de país: ${profile.country_preference || 'brazil'}
+Localização: ${profile.location}
+Resumo: ${profile.summary}
+Hard Skills: ${profile.hard_skills}
+Soft Skills: ${profile.soft_skills}
+Idiomas: ${profile.languages}
+Histórico: ${profile.work_history}
+Salário pretendido: R$${profile.salary_min} - R$${profile.salary_max}
+Tipos de empresa preferidos: ${profile.company_types}
+Setores de interesse: ${profile.sectors_interest}
+Setores a evitar: ${profile.sectors_avoid}
+O que não quer: ${profile.dealbreakers}
+  `.trim();
+
+  const prompt = `
+Você é um assistente de busca de empregos. Analise o conteúdo da vaga abaixo e avalie a compatibilidade com o perfil do candidato.
+
+Conteúdo da vaga (colado pelo usuário de ${url}):
+${text.slice(0, 8000)}
+
+Perfil do candidato:
+${profileText}
+
+Use APENAS as informações presentes no conteúdo da vaga. NÃO invente nada.
+Se um campo não estiver no conteúdo, use null. Nunca adivinhe ou complete com dados que não estão lá.
+
+Retorne APENAS um JSON válido com esta estrutura:
+{
+  "title": "título exato da vaga ou null",
+  "company": "nome exato da empresa ou null",
+  "location": "cidade/estado exatos ou null",
+  "country": "brazil",
+  "modality": "remoto|presencial|hibrido ou null",
+  "level": "junior|pleno|senior ou null",
+  "description": "texto da descrição copiado do conteúdo, sem inventar",
+  "score": 4.2,
+  "score_reason": "explicação em 2-3 frases baseada no conteúdo real"
+}
+
+O campo "country" deve ser "brazil" se a vaga é para trabalhar no Brasil ou remoto para empresa brasileira.
+Para qualquer outro país coloque o nome do país em inglês minúsculo (ex: "usa", "portugal").
+
+O score vai de 0 a 5:
+- 5.0: match perfeito
+- 4.0+: muito boa
+- 3.0+: vale considerar
+- 2.0+: pouco alinhada
+- abaixo de 2: não recomendada
+
+REGRAS DE NÍVEL (importante):
+- Se o candidato é JÚNIOR e a vaga é pleno/sênior: score máximo 2.5
+- Se o candidato é PLENO e a vaga é sênior: score máximo 3.0
+- Se o candidato é PLENO e a vaga é júnior: score máximo 3.5
+- Se o candidato é SÊNIOR e a vaga é júnior/pleno: score máximo 3.0
+- Nível compatível não penaliza o score
+
+REGRA DE PAÍS (importante):
+- Se o candidato quer só Brasil (country_preference = brazil) e a vaga exige trabalhar fora do Brasil: score máximo 1.5
+- Se o candidato aceita exterior (country_preference = any): país não penaliza o score
+  `;
+
+  const result = await getModel().generateContent(prompt);
+  const text2 = result.response.text().replace(/```json\n?|\n?```/g, '').trim();
+  return JSON.parse(text2);
 }
 
 export async function evaluateJob(url, profile) {
